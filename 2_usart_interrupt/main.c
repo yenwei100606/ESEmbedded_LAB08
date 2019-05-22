@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "reg.h"
+#include "blink.h"
 
 void init_usart1(void)
 {
@@ -57,6 +58,12 @@ void init_usart1(void)
 	//set RE bit
 	SET_BIT(USART1_BASE + USART_CR1_OFFSET, RE_BIT);
 
+	//set 	RXNEIE
+	SET_BIT(USART1_BASE + USART_CR1_OFFSET,RXNE_BIT);
+
+	//set NVIC IRQ37 => (M+(32*N)) |M=5,N=1
+	SET_BIT(NVIC_ISER_BASE + NVIC_ISERn_OFFSET(1),5);
+
 }
 
 void usart1_send_char(const char ch)
@@ -70,11 +77,35 @@ void usart1_send_char(const char ch)
 char usart1_receive_char(void)
 {
 	//wait until RXNE ==1
-	while (!READ_BIT(USART1_BASE + USART_SR_OFFSET, RXNE_BIT))
+	while (!READ_BIT(USART1_BASE + USART_SR_OFFSET, RXNEIE_BIT))
 		;
 	return (char)REG(USART1_BASE + USART_DR_OFFSET); 
 }
 
+void usart1_handler()
+{
+	char ch;
+	if(READ_BIT(USART1_BASE + USART_SR_OFFSET,ORE_BIT))
+	{
+
+		//usart1_send_char('!');
+		for(unsigned int i=0;i<50000000;i++)
+			;
+		ch = (char)REG(USART1_BASE + USART_DR_OFFSET);
+		if(ch=='\r')
+			usart1_send_char('\n');
+		usart1_send_char(ch);
+		usart1_send_char('~');
+	}else if(READ_BIT(USART1_BASE + USART_SR_OFFSET,RXNE_BIT)){
+		char ch = (char)REG(USART1_BASE + USART_DR_OFFSET);
+	
+		if(ch=='\r')
+			usart1_send_char('\n');
+		
+		usart1_send_char(ch);
+	}
+}
+ 
 int main(void)
 {
 	init_usart1();
@@ -84,7 +115,9 @@ int main(void)
 	//send Hello world
 	while (*hello != '\0')
 		usart1_send_char(*hello++);
+	blink(LED_BLUE);
 
+	
 
 	//receive char and resend it
 	char ch;
